@@ -10,7 +10,7 @@
 #include "drivers/i2c/i2c_bus.h"
 #include "drivers/lux/bh1750.h"
 #include "drivers/network/tcp_client.h"
-#include "drivers/display/ssd1306_i2c.h"
+#include "drivers/display_2.0/ssd1306_i2c.h"
 
 // --- Wi-Fi ---
 #define WIFI_SSID     "KAUA_LQ"
@@ -32,7 +32,6 @@ void write_oled_values(void);
 int main() {
     stdio_init_all();
     sleep_ms(3000);
-
     printf("\n--- Solar Station - EMBARCATECH ---\n");
 
     gpio_init(BTN_A);
@@ -42,7 +41,6 @@ int main() {
     // inicializa o barramento i2c
     i2c_bus_init();
     i2c_oled_init();
-
     SSD1306_init(); // inicia o display OLED
 
     // Wi-Fi init
@@ -50,7 +48,6 @@ int main() {
         printf("Erro ao inicializar Wi-Fi\n");
         return -1;
     }
-
     cyw43_arch_enable_sta_mode();
 
     SSD1306_clear();
@@ -100,15 +97,9 @@ int main() {
         char payload[512];
         snprintf(payload, sizeof(payload),
             "{ \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n",
-            arrayBH1750[0],
-            arrayBH1750[1],
-            arrayBH1750[2],
-            arrayMPU6050[0],
-            arrayMPU6050[1],
-            arrayINA219[0],
-            arrayINA219[1],
-            arrayINA219[2],
-            arrayINA219[3]
+            arrayBH1750[0], arrayBH1750[1], arrayBH1750[2],
+            arrayMPU6050[0], arrayMPU6050[1],
+            arrayINA219[0], arrayINA219[1], arrayINA219[2], arrayINA219[3]
         );
 
         // tenta enviar (ou armazena e gere reconexão)

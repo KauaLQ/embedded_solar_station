@@ -27,8 +27,8 @@ void ina219_init() {
 
     // Calibração (exemplo para shunt 0.1Ω e até ~3.2A)
     // Current LSB ≈ 100uA
-    uint16_t calibration = 40960;
-    ina219_write_register(REG_CALIBRATION, calibration);
+    // uint16_t calibration = 40960;
+    ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
 }
 
 // leituras
@@ -44,16 +44,21 @@ float ina219_get_shunt_voltage() {
 }
 
 float ina219_get_current() {
-    int16_t raw = ina219_read_register(REG_CURRENT);
-    return raw * 0.00001f;      // 100uA por bit
+    // garante que calibração está ativa
+    ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
+
+    int16_t raw = (int16_t)ina219_read_register(REG_CURRENT);
+    return raw * INA219_CURRENT_LSB;
 }
 
 float ina219_get_power() {
+    ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
+
     uint16_t raw = ina219_read_register(REG_POWER);
-    return raw * 0.0002f;       // 2mW por bit
+    return raw * INA219_POWER_LSB;
 }
 
-float ina219_get_values(float *arrayINA219){
+void ina219_get_values(float *arrayINA219){
     arrayINA219[0] = ina219_get_bus_voltage();
     arrayINA219[1] = ina219_get_shunt_voltage();
     arrayINA219[2] = ina219_get_current();

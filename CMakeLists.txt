@@ -44,7 +44,7 @@ add_executable(solar_station_v2
         drivers/angle/mpu6050
         drivers/energy/ina219
         drivers/i2c/i2c_bus
-        drivers/display/ssd1306_i2c
+        drivers/display_2.0/ssd1306_i2c
 )
 
 pico_set_program_name(solar_station_v2 "solar_station_v2")

@@ -11,7 +11,7 @@
 #include "lwip/ip_addr.h"
 
 // --- TCP ---
-#define SERVER_IP "192.168.1.103" // IP do servidor Python
+#define SERVER_IP "192.168.1.106" // IP do servidor Python
 #define SERVER_PORT 9999
 #define PENDING_MSG_MAX 1024
 
