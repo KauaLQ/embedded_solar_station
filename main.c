@@ -32,7 +32,6 @@ void write_oled_values(void);
 int main() {
     stdio_init_all();
     sleep_ms(3000);
-    printf("\n--- Solar Station - EMBARCATECH ---\n");
 
     gpio_init(BTN_A);
     gpio_set_dir(BTN_A, GPIO_IN);
@@ -71,6 +70,11 @@ int main() {
     // IP do servidor
     if (!ip4addr_aton(SERVER_IP, &server_addr)) {
         printf("IP inválido: %s\n", SERVER_IP);
+        SSD1306_clear();
+        SSD1306_draw_string(5, 8, "Server IP");
+        SSD1306_draw_string(5, 16, "Desconhecido");
+        SSD1306_draw_string(5, 32, SERVER_IP);
+        SSD1306_update();
         return -1;
     }
 
@@ -84,6 +88,11 @@ int main() {
 
     // inicia tentativa de conexão TCP
     tcp_client_start();
+
+    SSD1306_clear();
+    SSD1306_draw_image(16, 8, 100, 48, icon_embarca_100px48px);
+    SSD1306_update();
+    sleep_ms(5000);
 
     while (true) {
         // varredura dos sensores

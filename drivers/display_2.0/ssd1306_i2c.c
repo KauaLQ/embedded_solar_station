@@ -229,6 +229,31 @@ void WriteString(uint8_t *buf, int16_t x, int16_t y, char *str) {
     }
 }
 
+void SSD1306_draw_image_full(const uint8_t *img) {
+    memcpy(ssd1306_buf, img, SSD1306_BUF_LEN);
+}
+
+void SSD1306_draw_image(int x0, int y0, int w, int h, const uint8_t *img) {
+    int pages = h / 8;
+
+    for (int page = 0; page < pages; page++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t byte = img[page * w + x];
+
+            for (int bit = 0; bit < 8; bit++) {
+                if (byte & (1 << bit)) {
+                    SetPixel(
+                        ssd1306_buf,
+                        x0 + x,
+                        y0 + page * 8 + bit,
+                        true
+                    );
+                }
+            }
+        }
+    }
+}
+
 // --------------- funções de alto nível ---------------
 void SSD1306_clear(void) {
     memset(ssd1306_buf, 0, SSD1306_BUF_LEN);
