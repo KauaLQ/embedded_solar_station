@@ -11,7 +11,7 @@
 #include "lwip/ip_addr.h"
 
 // --- TCP ---
-#define SERVER_IP "192.168.1.106" // IP do servidor Python
+#define SERVER_IP "192.168.1.100" // IP do servidor Python
 #define SERVER_PORT 9999
 #define PENDING_MSG_MAX 1024
 
@@ -21,6 +21,7 @@ extern ip_addr_t server_addr;
 extern volatile int tcp_connected_flag;
 extern volatile int tcp_trying_connect;
 extern volatile int has_pending_msg;
+extern volatile int sending_pending_msg;
 
 // inicializa o cliente TCP (cria PCB e tenta conectar)
 void tcp_client_start(void);
