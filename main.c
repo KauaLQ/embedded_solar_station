@@ -19,6 +19,7 @@
 
 #define BTN_A 5
 bool flag_btn = 0;
+bool flag_wf_state = 1;
 
 // vetores para armazenar leituras dos sensores
 float arrayBH1750[3];
@@ -30,6 +31,8 @@ float g_temp = 0.0;
 
 // funções auxiliares
 void button_callback(uint gpio, uint32_t events);
+bool wifi_is_connected();
+bool wifi_reconnect();
 void write_oled_values(void);
 
 /* ----------------- main -------------------- */
@@ -103,6 +106,22 @@ int main() {
     sleep_ms(5000);
 
     while (true) {
+        // Verifica conexão Wi-Fi
+        if (!wifi_is_connected()) {
+            flag_wf_state = 0;
+            write_oled_values(); // atualiza o display oled com símbolo de nowifi
+
+            if (!wifi_reconnect()) {
+                // Se falhar, espera um pouco e tenta novamente no próximo loop
+                sleep_ms(5000);
+                continue;
+            }
+
+            // Se reconectou, reinicia cliente TCP
+            tcp_client_close();
+            tcp_client_start();
+        }
+
         // varredura dos sensores I2C
         mux_sweep(arrayBH1750);
         mpu6050_get_values(arrayMPU6050);
@@ -152,6 +171,37 @@ void button_callback(uint gpio, uint32_t events) {
     }
 }
 
+bool wifi_is_connected() {
+    return cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP;
+}
+
+bool wifi_reconnect() {
+    cyw43_arch_deinit();
+    sleep_ms(1000);
+
+    if (cyw43_arch_init()) {
+        printf("Erro ao inicializar Wi-Fi\n");
+        return false;
+    }
+    cyw43_arch_enable_sta_mode();
+
+    int err = cyw43_arch_wifi_connect_timeout_ms(
+        WIFI_SSID,
+        WIFI_PASS,
+        CYW43_AUTH_WPA2_AES_PSK,
+        30000
+    );
+
+    if (err) {
+        return false;
+    }
+
+    flag_wf_state = 1;
+    sleep_ms(500);
+
+    return true;
+}
+
 void write_oled_values(void){
     char lux1_str[16];
     snprintf(lux1_str, sizeof(lux1_str), "l1=%.2f", arrayBH1750[0]);
@@ -192,6 +242,14 @@ void write_oled_values(void){
         SSD1306_draw_string(5, 30, vshunt_str);
         SSD1306_draw_string(5, 38, current_str);
         SSD1306_draw_string(5, 46, power_str);
+        SSD1306_update();
+    }
+    if (flag_wf_state) {
+        SSD1306_draw_image(110, 8, 16, 16, icon_wifi_preto);
+        SSD1306_update();
+    }
+    else {
+        SSD1306_draw_image(110, 8, 16, 16, icon_nowifi_preto);
         SSD1306_update();
     }
 }

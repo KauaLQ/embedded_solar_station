@@ -1,9 +1,9 @@
 from PIL import Image
 
 # ================= CONFIGURAÇÕES =================
-WIDTH  = 128   # largura do bitmap (múltiplo de 8 recomendado)
-HEIGHT = 64    # altura do bitmap (OBRIGATORIAMENTE múltiplo de 8)
-invert = False  # True = imagem branca no OLED, False = imagem preta no OLED
+WIDTH  = 16   # largura do bitmap (múltiplo de 8 recomendado)
+HEIGHT = 16    # altura do bitmap (OBRIGATORIAMENTE múltiplo de 8)
+invert = True  # True = imagem branca no OLED, False = imagem preta no OLED
 # =================================================
 
 # Validação para não quebrar a lógica de páginas
@@ -12,7 +12,7 @@ if HEIGHT % 8 != 0:
 
 PAGES = HEIGHT // 8
 
-img = (Image.open(r"C:\EMBARCATECH\solar_station_v2\extra\logo-embarcatech.png").convert("1").resize((WIDTH, HEIGHT)))
+img = (Image.open(r"C:\EMBARCATECH\solar_station_v2\extra\nowifi.jpg").convert("1").resize((WIDTH, HEIGHT)))
 
 data = list(img.getdata())
 
