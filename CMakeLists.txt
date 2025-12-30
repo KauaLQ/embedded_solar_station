@@ -45,7 +45,10 @@ add_executable(solar_station_v2
         drivers/energy/ina219
         drivers/i2c/i2c_bus
         drivers/display_2.0/ssd1306_i2c
+        drivers/temperature/ds18b20
 )
+
+add_subdirectory(drivers/onewire_library)
 
 pico_set_program_name(solar_station_v2 "solar_station_v2")
 pico_set_program_version(solar_station_v2 "0.1")
@@ -70,6 +73,7 @@ target_include_directories(solar_station_v2 PRIVATE
 target_link_libraries(solar_station_v2 
         hardware_i2c
         hardware_adc
+        onewire_library
         pico_cyw43_arch_lwip_threadsafe_background
         )
 

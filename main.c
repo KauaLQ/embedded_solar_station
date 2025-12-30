@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
-#include "pico/cyw43_arch.h"
 
 #include "drivers/angle/mpu6050.h"
 #include "drivers/energy/ina219.h"
@@ -11,6 +11,7 @@
 #include "drivers/lux/bh1750.h"
 #include "drivers/network/tcp_client.h"
 #include "drivers/display_2.0/ssd1306_i2c.h"
+#include "drivers/temperature/ds18b20.h"
 
 // --- Wi-Fi ---
 #define WIFI_SSID     "KAUA_LQ"
@@ -23,6 +24,9 @@ bool flag_btn = 0;
 float arrayBH1750[3];
 float arrayMPU6050[2];
 float arrayINA219[5];
+
+// variável do sensor de temperatura
+float g_temp = 0.0;
 
 // funções auxiliares
 void button_callback(uint gpio, uint32_t events);
@@ -78,10 +82,14 @@ int main() {
         return -1;
     }
 
-    // Inicializa sensores (mantendo seu fluxo)
+    // Inicializa sensores I2C (mantendo seu fluxo)
     bh1750_initialize();
     mpu6050_init();
     ina219_init();
+
+    // Inicializa o sensor de temperatura
+    ds18b20_t sensor;
+    ds18b20_init(&sensor, pio0, 17);
 
     // Configura interrupção para o botão
     gpio_set_irq_enabled_with_callback(BTN_A, GPIO_IRQ_EDGE_FALL, true, &button_callback);
@@ -90,24 +98,28 @@ int main() {
     tcp_client_start();
 
     SSD1306_clear();
-    SSD1306_draw_image(16, 8, 100, 48, icon_embarca_100px48px);
+    SSD1306_draw_image(8, 8, 100, 48, icon_embarca_100px48px);
     SSD1306_update();
     sleep_ms(5000);
 
     while (true) {
-        // varredura dos sensores
+        // varredura dos sensores I2C
         mux_sweep(arrayBH1750);
         mpu6050_get_values(arrayMPU6050);
         ina219_get_values(arrayINA219);
+
+        // leitura do sensor de temperatura
+        g_temp = ds18b20_read_temperature(&sensor);
 
         write_oled_values();
 
         // monta payload JSON
         char payload[512];
         snprintf(payload, sizeof(payload),
-            "{ \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n",
+            "{ \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n",
             arrayBH1750[0], arrayBH1750[1], arrayBH1750[2],
             arrayMPU6050[0], arrayMPU6050[1],
+            g_temp,
             arrayINA219[0], arrayINA219[1], arrayINA219[2], arrayINA219[3]
         );
 
@@ -152,6 +164,8 @@ void write_oled_values(void){
     snprintf(pitch_str, sizeof(pitch_str), "pt=%.2f", arrayMPU6050[0]);
     char roll_str[16];
     snprintf(roll_str, sizeof(roll_str), "rl=%.2f", arrayMPU6050[1]);
+    char temp_str[16];
+    snprintf(temp_str, sizeof(temp_str), "tp=%.2f", g_temp);
 
     char vbus_str[16];
     snprintf(vbus_str, sizeof(vbus_str), "vb=%.2f", arrayINA219[0]);
@@ -169,6 +183,7 @@ void write_oled_values(void){
         SSD1306_draw_string(5, 28, lux3_str);
         SSD1306_draw_string(5, 36, pitch_str);
         SSD1306_draw_string(5, 44, roll_str);
+        SSD1306_draw_string(5, 52, temp_str);
         SSD1306_update();
     }
     else {
