@@ -246,10 +246,18 @@ void write_oled_values(void){
     }
     if (flag_wf_state) {
         SSD1306_draw_image(110, 8, 16, 16, icon_wifi_preto);
-        SSD1306_update();
+        if (tcp_connected_flag) {
+            SSD1306_draw_image(110, 28, 16, 16, icon_cloud_preto);
+            SSD1306_update();
+        }
+        else {
+            SSD1306_draw_image(110, 28, 16, 16, icon_nocloud_preto);
+            SSD1306_update();
+        }
     }
     else {
         SSD1306_draw_image(110, 8, 16, 16, icon_nowifi_preto);
+        SSD1306_draw_image(110, 28, 16, 16, icon_nocloud_preto);
         SSD1306_update();
     }
 }

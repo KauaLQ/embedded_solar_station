@@ -12,7 +12,7 @@ if HEIGHT % 8 != 0:
 
 PAGES = HEIGHT // 8
 
-img = (Image.open(r"C:\EMBARCATECH\solar_station_v2\extra\nowifi.jpg").convert("1").resize((WIDTH, HEIGHT)))
+img = (Image.open(r"C:\EMBARCATECH\solar_station_v2\extra\nocloud.png").convert("1").resize((WIDTH, HEIGHT)))
 
 data = list(img.getdata())
 
