@@ -2,20 +2,26 @@
 
 // Função para escrever no registrador
 void mpu6050_write(uint8_t reg, uint8_t data) {
-    uint8_t buf[2] = {reg, data};
-    i2c_write_blocking(I2C_COM_PORT, MPU6050_ADDR, buf, 2, false);
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        uint8_t buf[2] = { reg, data };
+        i2c_write_blocking(I2C_COM_PORT, MPU6050_ADDR, buf, 2, false);
+        xSemaphoreGive(i2c_mutex);
+    }
 }
 
 // Função para ler blocos do MPU6050
 void mpu6050_read(uint8_t reg, uint8_t *buf, uint8_t len) {
-    i2c_write_blocking(I2C_COM_PORT, MPU6050_ADDR, &reg, 1, true);
-    i2c_read_blocking(I2C_COM_PORT, MPU6050_ADDR, buf, len, false);
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        i2c_write_blocking(I2C_COM_PORT, MPU6050_ADDR, &reg, 1, true);
+        i2c_read_blocking(I2C_COM_PORT, MPU6050_ADDR, buf, len, false);
+        xSemaphoreGive(i2c_mutex);
+    }
 }
 
 // Inicializa o MPU6050
 void mpu6050_init() {
     mpu6050_write(MPU6050_REG_PWR_MGMT_1, 0x00); // Desliga sleep
-    sleep_ms(100);
+    vTaskDelay(pdMS_TO_TICKS(100));             // RTOS-safe
 }
 
 // Converte 2 bytes em inteiro de 16 bits
