@@ -1,12 +1,14 @@
-#include "ds18b20.h"
+#include "ds18b20.h" // RTOS version
 
-static bool ds18b20_search(ds18b20_t *dev) {
+// Todas as chamadas ao driver DS18B20 são thread-safe.
+// Não chamar funções ow_* diretamente fora deste driver.
+static bool ds18b20_rtos_search(ds18b20_t *dev) {
     int found = ow_romsearch(&dev->ow, &dev->rom, 1, OW_SEARCH_ROM);
     dev->initialized = (found > 0);
     return dev->initialized;
 }
 
-bool ds18b20_init(ds18b20_t *dev, PIO pio, uint gpio) {
+bool ds18b20_rtos_init(ds18b20_t *dev, PIO pio, uint gpio) {
     uint offset;
 
     dev->pio = pio;
@@ -23,53 +25,63 @@ bool ds18b20_init(ds18b20_t *dev, PIO pio, uint gpio) {
         return false;
     }
 
-    return ds18b20_search(dev);
+    dev->mutex = xSemaphoreCreateMutex();
+    if (dev->mutex == NULL) {
+        return false;
+    }
+
+    return ds18b20_rtos_search(dev);
 }
 
-float ds18b20_read_temperature(ds18b20_t *dev) {
-
-    // Se não inicializado, tenta reconectar
-    if (!dev->initialized) {
-        if (!ds18b20_search(dev)) {
-            return DS18B20_ERROR_TEMP;
-        }
-    }
-
-    OW *ow = &dev->ow;
-
-    // Sensor sumiu?
-    if (!ow_reset(ow)) {
-        dev->initialized = false;
+float ds18b20_rtos_read_temperature(ds18b20_t *dev) {
+    if (xSemaphoreTake(dev->mutex, portMAX_DELAY) != pdTRUE) {
         return DS18B20_ERROR_TEMP;
     }
 
-    // Start conversion
-    ow_send(ow, OW_MATCH_ROM);
-    for (int i = 0; i < 64; i += 8)
-        ow_send(ow, dev->rom >> i);
-    ow_send(ow, DS18B20_CONVERT_T);
+    float temp = DS18B20_ERROR_TEMP;
 
-    // Timeout de conversão
-    absolute_time_t start = get_absolute_time();
-    while (ow_read(ow) == 0) {
-        if (absolute_time_diff_us(start, get_absolute_time()) >
-            DS18B20_CONV_TIMEOUT_MS * 1000) {
+    do {
+        if (!dev->initialized) {
+            if (!ds18b20_rtos_search(dev)) break;
+        }
+
+        OW *ow = &dev->ow;
+
+        if (!ow_reset(ow)) {
             dev->initialized = false;
-            return DS18B20_ERROR_TEMP;
+            break;
         }
-    }
 
-    // Read scratchpad
-    if (!ow_reset(ow)) {
-        dev->initialized = false;
-        return DS18B20_ERROR_TEMP;
-    }
+        ow_send(ow, OW_MATCH_ROM);
+        for (int i = 0; i < 64; i += 8)
+            ow_send(ow, dev->rom >> i);
+        ow_send(ow, DS18B20_CONVERT_T);
 
-    ow_send(ow, OW_MATCH_ROM);
-    for (int i = 0; i < 64; i += 8)
-        ow_send(ow, dev->rom >> i);
-    ow_send(ow, DS18B20_READ_SCRATCHPAD);
+        TickType_t start = xTaskGetTickCount();
+        while (ow_read(ow) == 0) {
+            if ((xTaskGetTickCount() - start) >
+                pdMS_TO_TICKS(DS18B20_CONV_TIMEOUT_MS)) {
+                dev->initialized = false;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
 
-    int16_t raw = ow_read(ow) | (ow_read(ow) << 8);
-    return raw / 16.0f;
+        if (!ow_reset(ow)) {
+            dev->initialized = false;
+            break;
+        }
+
+        ow_send(ow, OW_MATCH_ROM);
+        for (int i = 0; i < 64; i += 8)
+            ow_send(ow, dev->rom >> i);
+        ow_send(ow, DS18B20_READ_SCRATCHPAD);
+
+        int16_t raw = ow_read(ow) | (ow_read(ow) << 8);
+        temp = raw / 16.0f;
+
+    } while (0);
+
+    xSemaphoreGive(dev->mutex);
+    return temp;
 }

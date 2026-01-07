@@ -1,12 +1,15 @@
 // Para mais informações sobre o DS18B20 consulte: 
 // https://www.analog.com/en/products/ds18b20.html
 
-#ifndef DS18B20_DRIVER_H
+#ifndef DS18B20_DRIVER_H // RTOS Version
 #define DS18B20_DRIVER_H
 
 #include <stdbool.h>
 #include "hardware/pio.h"
-#include "pico/time.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
 #include "drivers/onewire_library/onewire_library.h"
 #include "drivers/onewire_library/ow_rom.h"
 
@@ -26,9 +29,10 @@ typedef struct {
     bool initialized;
     PIO pio;
     uint gpio;
+    SemaphoreHandle_t mutex;
 } ds18b20_t;
 
-bool ds18b20_init(ds18b20_t *dev, PIO pio, uint gpio);
-float ds18b20_read_temperature(ds18b20_t *dev);
+bool ds18b20_rtos_init(ds18b20_t *dev, PIO pio, uint gpio);
+float ds18b20_rtos_read_temperature(ds18b20_t *dev);
 
 #endif

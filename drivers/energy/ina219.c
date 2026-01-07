@@ -2,18 +2,28 @@
 
 // funções 12c
 void ina219_write_register(uint8_t reg, uint16_t value) {
-    uint8_t buf[3];
-    buf[0] = reg;
-    buf[1] = (value >> 8) & 0xFF;
-    buf[2] = value & 0xFF;
-    i2c_write_blocking(I2C_COM_PORT, INA219_ADDR, buf, 3, false);
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        uint8_t buf[3];
+        buf[0] = reg;
+        buf[1] = (value >> 8) & 0xFF;
+        buf[2] = value & 0xFF;
+        i2c_write_blocking(I2C_COM_PORT, INA219_ADDR, buf, 3, false);
+        
+        xSemaphoreGive(i2c_mutex); // Libera o bus para outras tasks
+    }
 }
 
 uint16_t ina219_read_register(uint8_t reg) {
-    uint8_t buf[2];
-    i2c_write_blocking(I2C_COM_PORT, INA219_ADDR, &reg, 1, true);
-    i2c_read_blocking(I2C_COM_PORT, INA219_ADDR, buf, 2, false);
-    return (buf[0] << 8) | buf[1];
+    uint16_t result = 0;
+    if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        uint8_t buf[2];
+        i2c_write_blocking(I2C_COM_PORT, INA219_ADDR, &reg, 1, true);
+        i2c_read_blocking(I2C_COM_PORT, INA219_ADDR, buf, 2, false);
+        result = (buf[0] << 8) | buf[1];
+        
+        xSemaphoreGive(i2c_mutex);
+    }
+    return result;
 }
 
 // init INA219
@@ -45,14 +55,14 @@ float ina219_get_shunt_voltage() {
 
 float ina219_get_current() {
     // garante que calibração está ativa
-    ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
+    // ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
 
     int16_t raw = (int16_t)ina219_read_register(REG_CURRENT);
     return raw * INA219_CURRENT_LSB;
 }
 
 float ina219_get_power() {
-    ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
+    // ina219_write_register(REG_CALIBRATION, INA219_CALIBRATION);
 
     uint16_t raw = ina219_read_register(REG_POWER);
     return raw * INA219_POWER_LSB;

@@ -5,6 +5,9 @@
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 
+#include "FreeRTOS.h"
+#include "queue.h"
+
 #include "drivers/angle/mpu6050.h"
 #include "drivers/energy/ina219.h"
 #include "drivers/i2c/i2c_bus.h"
@@ -21,19 +24,89 @@
 bool flag_btn = 0;
 bool flag_wf_state = 1;
 
-// vetores para armazenar leituras dos sensores
-float arrayBH1750[3];
-float arrayMPU6050[2];
-float arrayINA219[5];
+// estrutura para armazenar dados dos sensores da task de sensores
+typedef struct {
+    float lux[3];
+    float angle[2];
+    float energy[4];
+    float temperature;
+} sensor_data_t;
 
-// variável do sensor de temperatura
-float g_temp = 0.0;
+QueueHandle_t sensor_queue; // Fila para comunicar os dados dos sensores entre as tasks
 
 // funções auxiliares
 void button_callback(uint gpio, uint32_t events);
 bool wifi_is_connected();
 bool wifi_reconnect();
-void write_oled_values(void);
+void write_oled_values(const sensor_data_t *data);
+
+void sensor_task(void *param) {
+    sensor_data_t data;
+
+    // Inicializa sensores I2C (mantendo seu fluxo)
+    ina219_init();
+    bh1750_initialize();
+    mpu6050_init();
+
+    while (true) {
+        mux_sweep(data.lux);
+        mpu6050_get_values(data.angle);
+        ina219_get_values(data.energy);
+
+        data.temperature = ds18b20_rtos_read_temperature((ds18b20_t *)param);
+
+        // Envia snapshot completo (sobrescreve se necessário)
+        xQueueOverwrite(sensor_queue, &data);
+
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 Hz
+    }
+}
+
+void comm_task(void *param) {
+    sensor_data_t data;
+    char payload[512];
+
+    while (true) {
+        // GERENCIAMENTO DE CONEXÃO
+        if (!wifi_is_connected()) {
+            flag_wf_state = 0;
+            write_oled_values(&data); // Mostra o ícone de sem Wi-Fi
+
+            if (!wifi_reconnect()) {
+                // Se falhar, aguarda 5 segundos sem travar o processador
+                // Isso permite que outras tasks (como a de sensores) continuem rodando
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                continue; 
+            }
+
+            // Se reconectou com sucesso
+            tcp_client_close();
+            tcp_client_start();
+            flag_wf_state = 1; 
+        }
+
+        if (xQueueReceive(sensor_queue, &data, pdMS_TO_TICKS(200)) == pdTRUE) {
+
+            // Atualiza display OLED com os novos dados
+            write_oled_values(&data);
+
+            snprintf(payload, sizeof(payload),
+                "{ \"meta\": { \"pend\": %s }, \"data\": { \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n}\n",
+                has_pending_msg ? "true" : "false",
+                data.lux[0], data.lux[1], data.lux[2],
+                data.angle[0], data.angle[1],
+                data.temperature,
+                data.energy[0], data.energy[1], data.energy[2], data.energy[3]
+            );
+
+            tcp_client_send(payload);
+            tcp_client_flush_pending_if_possible();
+        }
+
+        cyw43_arch_poll();
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
 
 /* ----------------- main -------------------- */
 int main() {
@@ -85,14 +158,9 @@ int main() {
         return -1;
     }
 
-    // Inicializa sensores I2C (mantendo seu fluxo)
-    bh1750_initialize();
-    mpu6050_init();
-    ina219_init();
-
     // Inicializa o sensor de temperatura
     ds18b20_t sensor;
-    ds18b20_init(&sensor, pio0, 17);
+    ds18b20_rtos_init(&sensor, pio0, 17);
 
     // Configura interrupção para o botão
     gpio_set_irq_enabled_with_callback(BTN_A, GPIO_IRQ_EDGE_FALL, true, &button_callback);
@@ -105,55 +173,15 @@ int main() {
     SSD1306_update();
     sleep_ms(5000);
 
-    while (true) {
-        // Verifica conexão Wi-Fi
-        if (!wifi_is_connected()) {
-            flag_wf_state = 0;
-            write_oled_values(); // atualiza o display oled com símbolo de nowifi
+    sensor_queue = xQueueCreate(1, sizeof(sensor_data_t));
+    configASSERT(sensor_queue != NULL);
 
-            if (!wifi_reconnect()) {
-                // Se falhar, espera um pouco e tenta novamente no próximo loop
-                sleep_ms(5000);
-                continue;
-            }
+    xTaskCreate(sensor_task, "SensorTask", 1024, &sensor, 2, NULL);
+    xTaskCreate(comm_task, "CommTask", 4096, NULL, 1, NULL);
 
-            // Se reconectou, reinicia cliente TCP
-            tcp_client_close();
-            tcp_client_start();
-        }
+    vTaskStartScheduler();
 
-        // varredura dos sensores I2C
-        mux_sweep(arrayBH1750);
-        mpu6050_get_values(arrayMPU6050);
-        ina219_get_values(arrayINA219);
-
-        // leitura do sensor de temperatura
-        g_temp = ds18b20_read_temperature(&sensor);
-
-        write_oled_values();
-
-        // monta payload JSON
-        char payload[512];
-        snprintf(payload, sizeof(payload),
-            "{ \"meta\": { \"pend\": %s }, \"data\": { \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n}\n",
-            has_pending_msg ? "true" : "false",
-            arrayBH1750[0], arrayBH1750[1], arrayBH1750[2],
-            arrayMPU6050[0], arrayMPU6050[1],
-            g_temp,
-            arrayINA219[0], arrayINA219[1], arrayINA219[2], arrayINA219[3]
-        );
-
-        // tenta enviar (ou armazena e gere reconexão)
-        tcp_client_send(payload);
-
-        // Faz polling do Wi-Fi / lwip e tenta descarregar pending messages
-        for (int i = 0; i < 2; i++) {
-            sleep_ms(1000);        // 1 segundo × 600 = 10 minutos
-            cyw43_arch_poll();     // mantém o Wi-Fi vivo
-            // a cada loop pequeno, tentamos flush se possível
-            tcp_client_flush_pending_if_possible();
-        }
-    }
+    while (true){ /*nada pra fazer aqui, tudo roda em RTOS*/ }
 
     // nunca chega aqui, mas boa prática
     tcp_client_close();
@@ -178,7 +206,7 @@ bool wifi_is_connected() {
 
 bool wifi_reconnect() {
     cyw43_arch_deinit();
-    sleep_ms(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
     if (cyw43_arch_init()) {
         printf("Erro ao inicializar Wi-Fi\n");
@@ -198,34 +226,33 @@ bool wifi_reconnect() {
     }
 
     flag_wf_state = 1;
-    sleep_ms(500);
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     return true;
 }
 
-void write_oled_values(void){
+void write_oled_values(const sensor_data_t *data){
     char lux1_str[16];
-    snprintf(lux1_str, sizeof(lux1_str), "l1=%.2f", arrayBH1750[0]);
+    snprintf(lux1_str, sizeof(lux1_str), "l1=%.2f", data->lux[0]);
     char lux2_str[16];
-    snprintf(lux2_str, sizeof(lux2_str), "l2=%.2f", arrayBH1750[1]);
+    snprintf(lux2_str, sizeof(lux2_str), "l2=%.2f", data->lux[1]);
     char lux3_str[16];
-    snprintf(lux3_str, sizeof(lux3_str), "l3=%.2f", arrayBH1750[2]);
+    snprintf(lux3_str, sizeof(lux3_str), "l3=%.2f", data->lux[2]);
 
     char pitch_str[16];
-    snprintf(pitch_str, sizeof(pitch_str), "pt=%.2f", arrayMPU6050[0]);
+    snprintf(pitch_str, sizeof(pitch_str), "pt=%.2f", data->angle[0]);
     char roll_str[16];
-    snprintf(roll_str, sizeof(roll_str), "rl=%.2f", arrayMPU6050[1]);
+    snprintf(roll_str, sizeof(roll_str), "rl=%.2f", data->angle[1]);
     char temp_str[16];
-    snprintf(temp_str, sizeof(temp_str), "tp=%.2f", g_temp);
-
+    snprintf(temp_str, sizeof(temp_str), "tp=%.2f", data->temperature);
     char vbus_str[16];
-    snprintf(vbus_str, sizeof(vbus_str), "vb=%.2f", arrayINA219[0]);
+    snprintf(vbus_str, sizeof(vbus_str), "vb=%.2f", data->energy[0]);
     char vshunt_str[16];
-    snprintf(vshunt_str, sizeof(vshunt_str), "vs=%.4f", arrayINA219[1]);
+    snprintf(vshunt_str, sizeof(vshunt_str), "vs=%.4f", data->energy[1]);
     char current_str[16];
-    snprintf(current_str, sizeof(current_str), "i=%.4f", arrayINA219[2]);
+    snprintf(current_str, sizeof(current_str), "i=%.4f", data->energy[2]);
     char power_str[16];
-    snprintf(power_str, sizeof(power_str), "p=%.4f", arrayINA219[3]);
+    snprintf(power_str, sizeof(power_str), "p=%.4f", data->energy[3]);
 
     if (!flag_btn) {
         SSD1306_clear();

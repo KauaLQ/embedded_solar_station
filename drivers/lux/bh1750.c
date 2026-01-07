@@ -5,7 +5,7 @@ void bh1750_cmd_init() {
     uint8_t power_on_cmd = 0x01;
     uint8_t cont_high_res_mode = 0x10;
     i2c_write_blocking(I2C_COM_PORT, BH1750_ADDR, &power_on_cmd, 1, false);
-    sleep_ms(10);
+    vTaskDelay(pdMS_TO_TICKS(10));
     i2c_write_blocking(I2C_COM_PORT, BH1750_ADDR, &cont_high_res_mode, 1, false);
 }
 
@@ -26,17 +26,29 @@ void mux_select_chanel(uint8_t channel) {
 
 void mux_sweep(float *arrayBH1750) {
     for (int i = 5; i < 8; i++) {
-        mux_select_chanel(i);
-        sleep_ms(15);
-        arrayBH1750[i - 5] = bh1750_read_lux();
+        if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+
+            mux_select_chanel(i);
+            vTaskDelay(pdMS_TO_TICKS(15));
+
+            arrayBH1750[i - 5] = bh1750_read_lux();
+
+            xSemaphoreGive(i2c_mutex);
+        }
     }
 }
 
 void bh1750_initialize(){
     for (int i = 5; i < 8; i++) {
-        mux_select_chanel(i);
-        sleep_ms(15);
-        bh1750_cmd_init();
-        sleep_ms(180);
+        if (xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+
+            mux_select_chanel(i);
+            vTaskDelay(pdMS_TO_TICKS(15));
+
+            bh1750_cmd_init();
+            vTaskDelay(pdMS_TO_TICKS(180));
+
+            xSemaphoreGive(i2c_mutex);
+        }
     }
 }
