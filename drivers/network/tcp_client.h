@@ -21,7 +21,6 @@ extern ip_addr_t server_addr;
 extern volatile int tcp_connected_flag;
 extern volatile int tcp_trying_connect;
 extern volatile int has_pending_msg;
-extern volatile int sending_pending_msg;
 
 // inicializa o cliente TCP (cria PCB e tenta conectar)
 void tcp_client_start(void);

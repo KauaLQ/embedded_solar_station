@@ -9,7 +9,6 @@ volatile int tcp_trying_connect = 0;
 // mensagem pendente (simples fila de 1 elemento)
 char pending_msg[PENDING_MSG_MAX];
 volatile int has_pending_msg = 0;
-volatile int sending_pending_msg = 0;
 
 /* ------------- TCP callbacks --------------- */
 
@@ -80,7 +79,6 @@ static err_t tcp_client_sent(void *arg, struct tcp_pcb *tpcb, u16_t len) {
         // assumimos que a mensagem foi enviada corretamente, então marcamos como enviada
         has_pending_msg = 0;
         pending_msg[0] = '\0';
-        sending_pending_msg = 0;
         // se você quiser manter histórico ou enviar a próxima mensagem, faria aqui
     }
     return ERR_OK;
@@ -160,17 +158,10 @@ void tcp_client_try_reconnect(void) {
 void tcp_client_send(const char *msg) {
     if (!msg) return;
 
-    // se não veio do flush, é mensagem normal
-    if (!has_pending_msg) {
-        sending_pending_msg = 0;
-    }
-
-    int len = strlen(msg);
-    if (len <= 0) return;
-
     // se já tem pending, sobrescreve (simples política). Pode ser alterado para fila real.
-    if (len >= PENDING_MSG_MAX) {
-        printf("tcp_client_send: mensagem muito grande (%d bytes)\n", len);
+    int len = strlen(msg);
+    if (len <= 0 || len >= PENDING_MSG_MAX) {
+        printf("tcp_client_send: tamanho inválido (%d bytes)\n", len);
         return;
     }
 
@@ -186,18 +177,8 @@ void tcp_client_send(const char *msg) {
         return;
     }
 
-    // Lógica para adicionar flag indicativa de mensagem pendente no json
-    // IMPORTANTE: para essa lógica funcionar, msg precisa ser um json válido!! formato -> {"lux1": 11.67,...}\n
-    char tx_buffer[PENDING_MSG_MAX + 128];
-
-    snprintf(tx_buffer, sizeof(tx_buffer),
-        "{ \"meta\": { \"pend\": %s }, \"data\": %s }\n",
-        sending_pending_msg ? "true" : "false",
-        msg
-    );
-
     // tentamos escrever diretamente
-    err_t err = tcp_write(client_pcb, tx_buffer, strlen(tx_buffer), TCP_WRITE_FLAG_COPY);
+    err_t err = tcp_write(client_pcb, msg, len, TCP_WRITE_FLAG_COPY);
 
     if (err == ERR_OK) {
         // solicita envio inmediato do stack
@@ -206,7 +187,6 @@ void tcp_client_send(const char *msg) {
             printf("tcp_client_send: tcp_output retornou %d\n", err);
             // manter a mensagem como pendente para tentar depois
             strncpy(pending_msg, msg, PENDING_MSG_MAX - 1);
-            pending_msg[PENDING_MSG_MAX - 1] = '\0';
             has_pending_msg = 1;
         } else {
             // tudo bem: registramos que não há pendente
@@ -219,16 +199,14 @@ void tcp_client_send(const char *msg) {
         // Buffer do TCP cheio: armazena a mensagem e deixe o callback tcp_client_sent liberar
         printf("tcp_client_send: ERR_MEM (buffer cheio). Salvando mensagem para retry\n");
         strncpy(pending_msg, msg, PENDING_MSG_MAX - 1);
-        pending_msg[PENDING_MSG_MAX - 1] = '\0';
         has_pending_msg = 1;
         return;
     }
 
     // outros erros: marca desconexão e tenta reconectar
     printf("tcp_client_send: erro ao tcp_write: %d\n", err);
-    has_pending_msg = 1;
     strncpy(pending_msg, msg, PENDING_MSG_MAX - 1);
-    pending_msg[PENDING_MSG_MAX - 1] = '\0';
+    has_pending_msg = 1;
 
     // força reconexão
     if (client_pcb) {
@@ -243,7 +221,6 @@ void tcp_client_send(const char *msg) {
 /* periodic check to flush pending messages (chamado no main loop) */
 void tcp_client_flush_pending_if_possible(void) {
     if (has_pending_msg && tcp_connected_flag && client_pcb) {
-        sending_pending_msg = 1;
         tcp_client_send(pending_msg);
     }
 }

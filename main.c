@@ -135,7 +135,8 @@ int main() {
         // monta payload JSON
         char payload[512];
         snprintf(payload, sizeof(payload),
-            "{ \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n",
+            "{ \"meta\": { \"pend\": %s }, \"data\": { \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n}\n",
+            has_pending_msg ? "true" : "false",
             arrayBH1750[0], arrayBH1750[1], arrayBH1750[2],
             arrayMPU6050[0], arrayMPU6050[1],
             g_temp,
