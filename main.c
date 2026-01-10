@@ -4,6 +4,7 @@
 #include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "mbedtls/md.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -40,6 +41,37 @@ bool wifi_is_connected();
 bool wifi_reconnect();
 void write_oled_values(const sensor_data_t *data);
 
+#define HMAC_SECRET "solar_station_secret_2025"
+
+void hmac_sha256(const char *input, char *output_hex) {
+    unsigned char hmac[32];
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t *info;
+
+    info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, info, 1);
+
+    mbedtls_md_hmac_starts(&ctx,
+        (const unsigned char *)HMAC_SECRET,
+        strlen(HMAC_SECRET)
+    );
+
+    mbedtls_md_hmac_update(&ctx,
+        (const unsigned char *)input,
+        strlen(input)
+    );
+
+    mbedtls_md_hmac_finish(&ctx, hmac);
+    mbedtls_md_free(&ctx);
+
+    // Converte para hexadecimal
+    for (int i = 0; i < 32; i++) {
+        sprintf(output_hex + (i * 2), "%02x", hmac[i]);
+    }
+    output_hex[64] = '\0';
+}
+
 void sensor_task(void *param) {
     sensor_data_t data;
 
@@ -64,6 +96,8 @@ void sensor_task(void *param) {
 
 void comm_task(void *param) {
     sensor_data_t data;
+    char data_json[384];
+    char hmac_hex[65];
     char payload[512];
 
     while (true) {
@@ -90,13 +124,33 @@ void comm_task(void *param) {
             // Atualiza display OLED com os novos dados
             write_oled_values(&data);
 
-            snprintf(payload, sizeof(payload),
-                "{ \"meta\": { \"pend\": %s }, \"data\": { \"lux1\": %.2f, \"lux2\": %.2f, \"lux3\": %.2f, \"pt\": %.2f, \"rl\": %.2f, \"tp\": %.2f, \"vb\": %.2f, \"vs\": %.4f, \"i\": %.4f, \"p\": %.4f }\n}\n",
-                has_pending_msg ? "true" : "false",
+            snprintf(data_json, sizeof(data_json),
+                "{"
+                "\"lux1\":%.2f," "\"lux2\":%.2f," "\"lux3\":%.2f,"
+                "\"pt\":%.2f," "\"rl\":%.2f,"
+                "\"tp\":%.2f," "\"vb\":%.2f," "\"vs\":%.4f," "\"i\":%.4f," "\"p\":%.4f"
+                "}",
                 data.lux[0], data.lux[1], data.lux[2],
                 data.angle[0], data.angle[1],
                 data.temperature,
                 data.energy[0], data.energy[1], data.energy[2], data.energy[3]
+            );
+
+            // HMAC somente do data_json
+            hmac_sha256(data_json, hmac_hex);
+
+            // Payload final
+            snprintf(payload, sizeof(payload),
+                "{"
+                "\"meta\":{"
+                    "\"pend\":%s,"
+                    "\"hmac\":\"%s\""
+                "},"
+                "\"data\":%s"
+                "}\n",
+                has_pending_msg ? "true" : "false",
+                hmac_hex,
+                data_json
             );
 
             tcp_client_send(payload);

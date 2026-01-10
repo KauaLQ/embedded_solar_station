@@ -1,6 +1,9 @@
 import socket
 import json
 import threading
+import hmac
+import hashlib
+import re
 from datetime import datetime, timezone, timedelta
 
 # ===============================
@@ -10,6 +13,44 @@ TCP_IP = "0.0.0.0"
 TCP_PORT = 9999
 OUTPUT_FILE = "..\\solar_station_v2\\server\\data.txt"
 BUFFER_SIZE = 4096
+HMAC_SECRET = b"solar_station_secret_2025"
+
+def extract_data_json(raw_message: str) -> str:
+    """
+    Extrai o objeto JSON de 'data' preservando a formatação original.
+    """
+    match = re.search(r'"data"\s*:\s*(\{.*\})\s*$', raw_message)
+    if not match:
+        return None
+    return match.group(1)
+
+def verify_hmac(raw_message: str) -> bool:
+    try:
+        payload = json.loads(raw_message)
+    except json.JSONDecodeError:
+        return False
+
+    received_hmac = payload.get("meta", {}).get("hmac")
+    if not received_hmac:
+        return False
+
+    data_json = extract_data_json(raw_message)
+    if not data_json:
+        return False
+
+    # Encontra onde começa o trecho desejado
+    inicio = data_json.find('{"lux1"')
+
+    # Encontra o primeiro "}" APÓS a posição de início
+    # O segundo argumento do find diz por onde ele deve começar a procurar
+    fim = data_json.find('}', inicio)
+
+    # Extrai o pedaço (usamos +1 para incluir o caractere "}" no resultado)
+    data_json_split = data_json[inicio:fim+1]
+
+    expected_hmac = hmac.new(HMAC_SECRET, data_json_split.encode(), hashlib.sha256).hexdigest()
+
+    return hmac.compare_digest(received_hmac, expected_hmac)
 
 def handle_client(conn, addr):
     """Função que gerencia cada conexão de cliente em uma thread separada."""
@@ -35,6 +76,13 @@ def handle_client(conn, addr):
 
                 try:
                     payload = json.loads(raw_message)
+
+                    if not verify_hmac(raw_message):
+                        print(f"[HMAC INVÁLIDO] Mensagem descartada de {addr}")
+                        continue
+
+                    # HMAC validado → remover do payload
+                    payload.get("meta", {}).pop("hmac", None)
 
                     if "received_at" not in payload:
                         payload["received_at"] = datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='minutes')

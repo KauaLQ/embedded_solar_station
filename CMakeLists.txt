@@ -75,6 +75,7 @@ target_link_libraries(solar_station_v2
         hardware_adc
         onewire_library
         pico_cyw43_arch_lwip_threadsafe_background
+        pico_mbedtls
         )
 
 pico_add_extra_outputs(solar_station_v2)
