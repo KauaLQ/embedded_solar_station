@@ -4,7 +4,13 @@ import threading
 import hmac
 import hashlib
 import re
+import os
+import sys
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+
+# Carrega variáveis de ambiente do arquivo .env
+load_dotenv()
 
 # ===============================
 # CONFIGURAÇÕES
@@ -13,7 +19,16 @@ TCP_IP = "0.0.0.0"
 TCP_PORT = 9999
 OUTPUT_FILE = "..\\solar_station_v2\\server\\data.txt"
 BUFFER_SIZE = 4096
-HMAC_SECRET = b"solar_station_secret_2025"
+HMAC_SECRET = os.getenv("HMAC_SECRET")
+
+if HMAC_SECRET is None:
+    sys.exit(
+        "Erro: variável de ambiente HMAC_SECRET não definida.\n"
+        "Defina-a antes de executar o servidor."
+    )
+
+# Converter para bytes (obrigatório para hmac)
+HMAC_SECRET = HMAC_SECRET.encode()
 
 def extract_data_json(raw_message: str) -> str:
     """
