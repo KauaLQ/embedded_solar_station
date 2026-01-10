@@ -6,6 +6,8 @@ import hashlib
 import re
 import os
 import sys
+import psycopg2
+from psycopg2 import pool
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
@@ -29,6 +31,55 @@ if HMAC_SECRET is None:
 
 # Converter para bytes (obrigatório para hmac)
 HMAC_SECRET = HMAC_SECRET.encode()
+
+DB_POOL = psycopg2.pool.ThreadedConnectionPool(
+    minconn=1,
+    maxconn=10,
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD")
+)
+
+def save_to_postgres(payload: dict):
+    conn = None
+    try:
+        conn = DB_POOL.getconn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO solar_data (
+                    received_at,
+                    lux1, lux2, lux3,
+                    temperatura,
+                    tensao_entrada,
+                    tensao_shunt,
+                    corrente,
+                    potencia,
+                    raw
+                )
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    payload["received_at"],
+                    payload["data"]["lux1"],
+                    payload["data"]["lux2"],
+                    payload["data"]["lux3"],
+                    payload["data"]["tp"],
+                    payload["data"]["vb"],
+                    payload["data"]["vs"],
+                    payload["data"]["i"],
+                    payload["data"]["p"],
+                    json.dumps(payload)
+                )
+            )
+            conn.commit()
+    except Exception as e:
+        print(f"[ERRO POSTGRES] Falha ao salvar dados: {e}")
+    finally:
+        if conn:
+            DB_POOL.putconn(conn)
 
 def extract_data_json(raw_message: str) -> str:
     """
@@ -106,6 +157,8 @@ def handle_client(conn, addr):
                         f.write(json.dumps(payload) + "\n")
 
                     print(f"[DADOS] {addr}: {payload}")
+
+                    save_to_postgres(payload)
 
                 except json.JSONDecodeError:
                     print(f"[ERRO JSON] Dados inválidos de {addr}: {raw_message}")
