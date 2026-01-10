@@ -4,7 +4,6 @@
 #include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
-#include "mbedtls/md.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -16,6 +15,7 @@
 #include "drivers/network/tcp_client.h"
 #include "drivers/display_2.0/ssd1306_i2c.h"
 #include "drivers/temperature/ds18b20.h"
+#include "drivers/security/crypto.h"
 
 // --- Wi-Fi ---
 #define WIFI_SSID     "KAUA_LQ"
@@ -40,37 +40,6 @@ void button_callback(uint gpio, uint32_t events);
 bool wifi_is_connected();
 bool wifi_reconnect();
 void write_oled_values(const sensor_data_t *data);
-
-#define HMAC_SECRET "solar_station_secret_2025"
-
-void hmac_sha256(const char *input, char *output_hex) {
-    unsigned char hmac[32];
-    mbedtls_md_context_t ctx;
-    const mbedtls_md_info_t *info;
-
-    info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    mbedtls_md_init(&ctx);
-    mbedtls_md_setup(&ctx, info, 1);
-
-    mbedtls_md_hmac_starts(&ctx,
-        (const unsigned char *)HMAC_SECRET,
-        strlen(HMAC_SECRET)
-    );
-
-    mbedtls_md_hmac_update(&ctx,
-        (const unsigned char *)input,
-        strlen(input)
-    );
-
-    mbedtls_md_hmac_finish(&ctx, hmac);
-    mbedtls_md_free(&ctx);
-
-    // Converte para hexadecimal
-    for (int i = 0; i < 32; i++) {
-        sprintf(output_hex + (i * 2), "%02x", hmac[i]);
-    }
-    output_hex[64] = '\0';
-}
 
 void sensor_task(void *param) {
     sensor_data_t data;

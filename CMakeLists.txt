@@ -46,6 +46,7 @@ add_executable(solar_station_v2
         drivers/i2c/i2c_bus
         drivers/display_2.0/ssd1306_i2c
         drivers/temperature/ds18b20
+        drivers/security/crypto
 )
 
 add_subdirectory(drivers/onewire_library)
