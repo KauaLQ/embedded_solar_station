@@ -151,7 +151,7 @@ def handle_client(conn, addr):
                     payload.get("meta", {}).pop("hmac", None)
 
                     if "received_at" not in payload:
-                        payload["received_at"] = datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='minutes')
+                        payload["received_at"] = datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
 
                     with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
                         f.write(json.dumps(payload) + "\n")
