@@ -1,76 +1,56 @@
-import { useEffect, useState } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend
-} from "recharts";
-
-const MAX_POINTS = 60;
+import { WebSocketProvider } from "./context/WebSocketContext";
+import { DashboardProvider } from "./context/DashboardContext";
+import TimeFilter from "./components/TimeFilter";
+import RealtimeChart from "./components/RealtimeChart";
 
 function App() {
-  const [chartData, setChartData] = useState([]);
-
-  useEffect(() => {
-    const socket = new WebSocket("ws://localhost:3001");
-
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      const point = {
-        time: new Date(data.received_at).toLocaleTimeString(),
-        lux1: data.lux1,
-        lux2: data.lux2,
-        lux3: data.lux3
-      };
-
-      setChartData((prev) => {
-        const updated = [...prev, point];
-        return updated.slice(-MAX_POINTS);
-      });
-    };
-
-    return () => socket.close();
-  }, []);
-
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Solar Dashboard</h1>
+    <WebSocketProvider>
+      <DashboardProvider>
+        <TimeFilter />
+          <div style={{ padding: 20 }}>
+            <h1>🌞 Solar Dashboard</h1>
 
-      <LineChart
-        width={900}
-        height={400}
-        data={chartData}
-      >
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
+            <RealtimeChart
+              title="Iluminância"
+              variables={[
+                { key: "lux1", label: "Lux 1", color: "#ff7300" },
+                { key: "lux2", label: "Lux 2", color: "#387908" },
+                { key: "lux3", label: "Lux 3", color: "#8884d8" }
+              ]}
+              windowSize={60}
+              yUnit="lux"
+            />
 
-        <Line
-          type="monotone"
-          dataKey="lux1"
-          stroke="#ff7300"
-          dot={false}
-        />
-        <Line
-          type="monotone"
-          dataKey="lux2"
-          stroke="#387908"
-          dot={false}
-        />
-        <Line
-          type="monotone"
-          dataKey="lux3"
-          stroke="#8884d8"
-          dot={false}
-        />
-      </LineChart>
-    </div>
+            <RealtimeChart
+              title="Temperatura"
+              variables={[
+                { key: "temperatura", label: "Temperatura", color: "#d62728" }
+              ]}
+              windowSize={120}
+              yUnit="°C"
+            />
+
+            <RealtimeChart
+              title="Potência"
+              variables={[
+                { key: "potencia", label: "Potência", color: "#1f77b4" }
+              ]}
+              windowSize={300}
+              yUnit="W"
+            />
+            <RealtimeChart
+              title="Angulo do Painel"
+              variables={[
+                { key: "pitch", label: "Pitch", color: "#ff7300" },
+                { key: "roll", label: "Roll", color: "#387908" }
+              ]}
+              windowSize={60}
+              yUnit="°"
+            />
+          </div>
+      </DashboardProvider>
+    </WebSocketProvider>
   );
 }
 

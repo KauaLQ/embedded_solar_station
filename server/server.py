@@ -52,6 +52,7 @@ def save_to_postgres(payload: dict):
                 INSERT INTO solar_data (
                     received_at,
                     lux1, lux2, lux3,
+                    pitch, roll,
                     temperatura,
                     tensao_entrada,
                     tensao_shunt,
@@ -59,13 +60,15 @@ def save_to_postgres(payload: dict):
                     potencia,
                     raw
                 )
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
                 (
                     payload["received_at"],
                     payload["data"]["lux1"],
                     payload["data"]["lux2"],
                     payload["data"]["lux3"],
+                    payload["data"]["pt"],
+                    payload["data"]["rl"],
                     payload["data"]["tp"],
                     payload["data"]["vb"],
                     payload["data"]["vs"],
