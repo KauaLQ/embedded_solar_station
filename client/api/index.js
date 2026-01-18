@@ -41,13 +41,45 @@ app.get("/api/solar/range-info", async (req, res) => {
 });
 
 app.get("/api/solar/range", async (req, res) => {
-  const { start, end } = req.query;
-
-  if (!start || !end) {
-    return res.status(400).json({ error: "start e end são obrigatórios" });
-  }
-
   try {
+    const { start, end } = req.query;
+
+    if (!start || !end) {
+      return res.status(400).json({
+        error: "Parâmetros start e end são obrigatórios"
+      });
+    }
+
+    const bounds = await db.query(`
+      SELECT 
+        MIN(received_at) AS min,
+        MAX(received_at) AS max
+      FROM solar_data
+    `);
+
+    const min = new Date(bounds.rows[0].min).getTime();
+    const max = new Date(bounds.rows[0].max).getTime();
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+
+    if (s < min) {
+      return res.status(400).json({
+        error: "Horário inicial menor que o mínimo disponível no banco"
+      });
+    }
+
+    if (e > max) {
+      return res.status(400).json({
+        error: "Horário final maior que o máximo disponível no banco"
+      });
+    }
+
+    if (s >= e) {
+      return res.status(400).json({
+        error: "Horário inicial deve ser menor que o final"
+      });
+    }
+
     const result = await db.query(
       `
       SELECT *

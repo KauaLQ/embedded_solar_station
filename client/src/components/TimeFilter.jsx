@@ -33,13 +33,38 @@ export default function TimeFilter() {
       .catch(err => console.error("Erro ao buscar range:", err));
   }, []);
 
+  function isOutOfRange(start, end, min, max) {
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    const minT = new Date(min).getTime();
+    const maxT = new Date(max).getTime();
+
+    if (s < minT) return "O horário inicial é menor que o mínimo disponível.";
+    if (e > maxT) return "O horário final é maior que o máximo disponível.";
+    if (s >= e) return "O horário inicial deve ser menor que o final.";
+
+    return null;
+  }
+
   async function applyFilter() {
+    const error = isOutOfRange(start, end, min, max);
+    if (error) {
+        alert(error);
+        return;
+    }
+
     // Ao enviar para a API, você pode precisar converter de volta para ISO UTC
     const res = await fetch(
       `http://localhost:3001/api/solar/range?start=${new Date(start).toISOString()}&end=${new Date(end).toISOString()}`
     );
-    const data = await res.json();
 
+    if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Erro ao aplicar filtro");
+        return;
+    }
+
+    const data = await res.json();
     setFilterData(data);
     setMode("filter");
   }
