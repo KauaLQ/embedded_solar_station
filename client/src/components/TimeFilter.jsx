@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDashboard } from "../context/DashboardContext";
+import { toast } from "react-toastify";
 
 export default function TimeFilter() {
   const { setMode, setFilterData } = useDashboard();
@@ -24,13 +25,15 @@ export default function TimeFilter() {
         // Armazenamos no formato que o input entende
         const formattedMin = formatToDateTimeLocal(data.min);
         const formattedMax = formatToDateTimeLocal(data.max);
-
         setMin(formattedMin);
         setMax(formattedMax);
         setStart(formattedMin);
         setEnd(formattedMax);
       })
-      .catch(err => console.error("Erro ao buscar range:", err));
+      .catch(err => {
+        console.error("Erro ao buscar range:", err);
+        toast.error("Erro ao carregar limites de data"); // Erro no carregamento
+      });
   }, []);
 
   function isOutOfRange(start, end, min, max) {
@@ -48,30 +51,36 @@ export default function TimeFilter() {
 
   async function applyFilter() {
     const error = isOutOfRange(start, end, min, max);
+    
     if (error) {
-        alert(error);
+        toast.warn(error);
         return;
     }
 
-    // Ao enviar para a API, você pode precisar converter de volta para ISO UTC
-    const res = await fetch(
-      `http://localhost:3001/api/solar/range?start=${new Date(start).toISOString()}&end=${new Date(end).toISOString()}`
-    );
+    try {
+        const res = await fetch(
+          `http://localhost:3001/api/solar/range?start=${new Date(start).toISOString()}&end=${new Date(end).toISOString()}`
+        );
 
-    if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || "Erro ao aplicar filtro");
-        return;
+        if (!res.ok) {
+            const err = await res.json();
+            toast.error(err.error || "Erro ao aplicar filtro"); // 3. Erro da API
+            return;
+        }
+
+        const data = await res.json();
+        setFilterData(data);
+        setMode("filter");
+        toast.success("Filtro aplicado com sucesso!"); // 4. Feedback de sucesso
+    } catch (err) {
+        toast.error("Falha na conexão com o servidor");
     }
-
-    const data = await res.json();
-    setFilterData(data);
-    setMode("filter");
   }
 
   function backToStreaming() {
     setFilterData(null);
     setMode("stream");
+    toast.info("Voltando para o modo de streaming");
   }
 
   if (!min || !max) return <p>Carregando filtros...</p>;

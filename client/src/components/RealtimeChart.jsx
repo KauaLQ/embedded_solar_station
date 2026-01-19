@@ -8,7 +8,9 @@ import {
 export default function RealtimeChart({
   title,
   variables,
-  windowSize = 60
+  windowSize = 60,
+  width = 900,
+  height = 400
 }) {
   const lastData = useRealtimeData();
   const { mode, filterData } = useDashboard();
@@ -87,10 +89,10 @@ export default function RealtimeChart({
   return (
     <>
       <h2>{title}</h2>
-      <LineChart width={900} height={400} data={data}>
+      <LineChart width={width} height={height} data={data}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="time" />
-        <YAxis />
+        <YAxis/>
         <Tooltip />
         <Legend />
         {variables.map((v) => (
@@ -100,31 +102,3 @@ export default function RealtimeChart({
     </>
   );
 }
-
-/*
-
-async function fetchLatest() {
-    const res = await fetch(
-      `http://localhost:3001/api/solar/latest?limit=${windowSize}`
-    );
-    const rows = await res.json();
-
-    const formatted = rows.map((row) => {
-      const point = {
-        time: formatTime(row.received_at)
-      };
-
-      variables.forEach((v) => {
-        point[v.key] = row[v.key];
-      });
-
-      return point;
-    });
-
-    setData(formatted);
-  }
-
-  fetchLatest();
-}, [mode, windowSize, variables]);
-
-*/
