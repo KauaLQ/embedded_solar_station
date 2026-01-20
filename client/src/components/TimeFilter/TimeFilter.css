@@ -1,0 +1,30 @@
+.container-timefilter{
+    max-width: 600px;
+    display: flex;
+    gap: 5px;
+    padding: 5px;
+}
+
+input[type="datetime-local"]{
+    background-color: #4f46e5;
+    padding: 2px;
+    font-family: "Roboto Mono",monospace;
+    color: #e3e9f7;
+    border: none;
+    outline: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.mybutton{
+    background-color: transparent;
+    border: none;
+    color: #0a0a0a;
+    font-size: medium;
+    cursor: pointer;
+}
+
+.mybutton i{
+    color: #0a0a0a;
+    font-size: medium;
+}

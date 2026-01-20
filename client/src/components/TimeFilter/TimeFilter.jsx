@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useDashboard } from "../context/DashboardContext";
+import { useDashboard } from "../../context/DashboardContext";
 import { toast } from "react-toastify";
+import './TimeFilter.css';
 
 export default function TimeFilter() {
   const { setMode, setFilterData } = useDashboard();
@@ -86,7 +87,7 @@ export default function TimeFilter() {
   if (!min || !max) return <p>Carregando filtros...</p>;
 
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div className="container-timefilter" style={{ marginBottom: 20 }}>
       <input
         type="datetime-local"
         value={start}
@@ -102,8 +103,8 @@ export default function TimeFilter() {
         onChange={(e) => setEnd(e.target.value)}
       />
 
-      <button onClick={applyFilter}>Filtrar</button>
-      <button onClick={backToStreaming}>Voltar ao Streaming</button>
+      <button className="mybutton" onClick={applyFilter}><i className="fa-solid fa-magnifying-glass-chart"></i> <b>FIND</b></button>
+      <button className="mybutton" onClick={backToStreaming}><i className="fa-solid fa-square-rss"></i> <b>LIVE</b></button>
     </div>
   );
 }

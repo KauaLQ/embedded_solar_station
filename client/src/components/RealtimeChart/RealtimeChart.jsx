@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useRealtimeData } from "../context/WebSocketContext";
-import { useDashboard } from "../context/DashboardContext";
+import { useRealtimeData } from "../../context/WebSocketContext";
+import { useDashboard } from "../../context/DashboardContext";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from "recharts";
+import './RealtimeChart.css';
 
 export default function RealtimeChart({
   title,
@@ -87,7 +88,7 @@ export default function RealtimeChart({
   }, [lastData, mode, variables, windowSize]);
 
   return (
-    <>
+    <div className="chartDiv">
       <h2>{title}</h2>
       <LineChart width={width} height={height} data={data}>
         <CartesianGrid strokeDasharray="3 3" />
@@ -99,6 +100,6 @@ export default function RealtimeChart({
           <Line key={v.key} dataKey={v.key} stroke={v.color} dot={false} />
         ))}
       </LineChart>
-    </>
+    </div>
   );
 }
