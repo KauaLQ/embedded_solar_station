@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { useRealtimeData } from "../../context/WebSocketContext";
 import { useDashboard } from "../../context/DashboardContext";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+  LineChart, ResponsiveContainer, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from "recharts";
 import './RealtimeChart.css';
 
 export default function RealtimeChart({
   title,
+  subtitle,
   variables,
   windowSize = 60,
-  width = 900,
+  // width = 900, // Não usada por enquanto
   height = 400
 }) {
   const lastData = useRealtimeData();
@@ -88,18 +89,37 @@ export default function RealtimeChart({
   }, [lastData, mode, variables, windowSize]);
 
   return (
-    <div className="chartDiv">
-      <h2>{title}</h2>
-      <LineChart width={width} height={height} data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" />
-        <YAxis/>
-        <Tooltip />
-        <Legend />
-        {variables.map((v) => (
-          <Line key={v.key} dataKey={v.key} stroke={v.color} dot={false} />
-        ))}
-      </LineChart>
+    <div id="chart_div">
+      <div id="chart_infos">
+        <span className="chart-description">
+          <b>{title}</b>
+        </span>
+        <span className="chart-description">
+          {subtitle}
+        </span>
+      </div>
+
+      <div id="chart_charts" style={{ width: '100%', height: height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 5, right: 20, left: -30, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="time"/>
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            {variables.map((v) => (
+              <Line
+                key={v.key}
+                dataKey={v.key}
+                name={v.label}
+                stroke={v.color}
+                dot={false}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

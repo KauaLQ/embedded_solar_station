@@ -1,4 +1,7 @@
-.myNav{
+#container-mynavbar{
+    background-color: #ffffff;
+    display: flex;
     padding: 15px 5px 0px 5px;
-    border-bottom: 1px solid rgb(153, 153, 153);
+    border-bottom: 1px solid #0a0a0a;
+    border-radius: 18px 18px 0 0;
 }

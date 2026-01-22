@@ -7,13 +7,39 @@
   font-family: 'Poppins', sans-serif;
 }
 
-#bodyApp{
+#bodyApp {
   display: flex;
   min-height: 100vh;
   background-color: #e3e9f7;
 }
 
-#mainApp{
+#mainApp {
   z-index: 1;
   padding-left: calc(82px + 20px);
+  /* Espaço da sidebar */
+  padding-right: 20px;
+  /* Recomendado: um respiro na direita */
+  flex: 1;
+  /* FAZ OCUPAR TODO O ESPAÇO RESTANTE */
+  display: flex;
+  flex-direction: column;
+  /* Alinha Navbar, H1 e Gráficos verticalmente */
+  min-width: 0;
+  /* Evita que o flex-item quebre o layout com conteúdos largos */
+}
+
+#page_infos {
+  display: flex;
+  flex-direction: column;
+  margin-top: 20px;
+  margin-bottom: 25px;
+}
+
+#page_infos span:first-child {
+  font-size: 25px;
+}
+
+#page_infos span:last-child {
+  color: #6b6b6b;
+  font-size: 13px;
 }

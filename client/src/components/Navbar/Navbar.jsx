@@ -1,11 +1,10 @@
-import React from "react";
 import TimeFilter from "../TimeFilter/TimeFilter";
 import './Navbar.css';
 
-export default function Navbar(){
+export default function Navbar() {
     return (
-        <nav className="myNav">
-            <div>
+        <nav id="container-mynavbar">
+            <div id="time_filter">
                 <TimeFilter />
             </div>
         </nav>

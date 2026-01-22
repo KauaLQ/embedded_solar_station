@@ -87,7 +87,7 @@ export default function TimeFilter() {
   if (!min || !max) return <p>Carregando filtros...</p>;
 
   return (
-    <div className="container-timefilter" style={{ marginBottom: 20 }}>
+    <div id="container-timefilter" style={{ marginBottom: 20 }}>
       <input
         type="datetime-local"
         value={start}
@@ -103,8 +103,8 @@ export default function TimeFilter() {
         onChange={(e) => setEnd(e.target.value)}
       />
 
-      <button className="mybutton" onClick={applyFilter}><i className="fa-solid fa-magnifying-glass-chart"></i> <b>FIND</b></button>
-      <button className="mybutton" onClick={backToStreaming}><i className="fa-solid fa-square-rss"></i> <b>LIVE</b></button>
+      <button className="mybutton" onClick={applyFilter}><i className="fa-solid fa-magnifying-glass-chart"></i> Filtrar</button>
+      <button className="mybutton" onClick={backToStreaming}><i className="fa-solid fa-square-rss"></i> Ao vivo</button>
     </div>
   );
 }
