@@ -15,7 +15,7 @@ export default function Navbar() {
         <nav id="sidebar" className={isOpen ? 'open-sidebar' : ''}>
             <div id="sidebar_content">
                 <div id="user">
-                    <img src="/logo192.png" id="user_avatar" alt="Avatar" />
+                    <img src="/logo_projeto.png" id="user_avatar" alt="Avatar" />
         
                     <p id="user_infos">
                         <span className="item-description">
