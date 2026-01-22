@@ -28,6 +28,12 @@
   /* Evita que o flex-item quebre o layout com conteúdos largos */
 }
 
+#page_section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 #page_infos {
   display: flex;
   flex-direction: column;
@@ -42,4 +48,18 @@
 #page_infos span:last-child {
   color: #6b6b6b;
   font-size: 13px;
+}
+
+#page_section_buttons{
+  display: flex;
+  gap: 10px;
+}
+
+.page-section{
+  background-color: #ffffff;
+  color: #0a0a0a;
+}
+
+.page-section i{
+  background-color: #d7d7d7;
 }

@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 import './TimeFilter.css';
 
 export default function TimeFilter() {
-  const { setMode, setFilterData } = useDashboard();
+  const {mode, setMode, setFilterData } = useDashboard();
   const [min, setMin] = useState("");
   const [max, setMax] = useState("");
   const [start, setStart] = useState("");
@@ -104,7 +104,7 @@ export default function TimeFilter() {
       />
 
       <button className="mybutton" onClick={applyFilter}><i className="fa-solid fa-magnifying-glass-chart"></i> Filtrar</button>
-      <button className="mybutton" onClick={backToStreaming}><i className="fa-solid fa-square-rss"></i> Ao vivo</button>
+      <button className={`mybutton ${mode === 'filter' ? 'disabled-stream' : ''}`} onClick={backToStreaming}><i className="fa-solid fa-square-rss"></i> Ao vivo</button>
     </div>
   );
 }

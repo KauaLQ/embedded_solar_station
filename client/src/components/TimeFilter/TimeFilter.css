@@ -1,6 +1,6 @@
 #container-timefilter{
     display: flex;
-    gap: 5px;
+    gap: 10px;
     padding: 5px;
     align-items: center; /* Garante que inputs e botões tenham a mesma base central */
 }
@@ -24,6 +24,30 @@ input[type="datetime-local"]{
     color: #ffffff;
     font-size: medium;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: transform 0.2s ease-in-out; /* Define a suavidade da animação */
+}
+
+.mybutton:hover {
+    /* O valor 1.05 significa que ele crescerá 5% do tamanho original */
+    transform: scale(1.05); 
+}
+
+.mybutton:active {
+    /* Opcional: faz ele "encolher" um pouquinho quando clicado, simulando um clique real */
+    transform: scale(0.98);
+}
+
+/* Classe para quando o streaming estiver desativado */
+.mybutton.disabled-stream {
+    background-color: #6b6b6b; /* Cinza */
+    opacity: 0.8;
+}
+
+/* Ajuste para que o ícone acompanhe a estética se desejar */
+.mybutton.disabled-stream i {
+    filter: grayscale(1); 
 }
 
 .mybutton i{

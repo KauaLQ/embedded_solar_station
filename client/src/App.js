@@ -15,14 +15,21 @@ function App() {
           <Sidebar />
           <div id="mainApp">
             <Navbar />
-            <div id="page_infos">
-              <span className="page-description">
-                Visão Geral
-              </span>
-              <span className="page-description">
-                Veja os gráficos com os dados do painel fotovoltáico
-              </span>
+            <div id="page_section">
+              <div id="page_infos">
+                <span className="page-description">
+                  Visão Geral
+                </span>
+                <span className="page-description">
+                  Veja os gráficos com os dados do painel fotovoltáico
+                </span>
+              </div>
+              <div id="page_section_buttons">
+                <button className="mybutton page-section"><i class="fa-solid fa-share-nodes"></i> Compartilhar</button>
+                <button className="mybutton page-section"><i class="fa-solid fa-file-csv"></i> Exportar</button>
+              </div>
             </div>
+
             <RealtimeChart
               title="Iluminância (LUX)"
               subtitle="Dados de iluminância dos 3 sensores BH1750"

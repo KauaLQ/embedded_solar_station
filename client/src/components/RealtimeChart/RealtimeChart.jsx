@@ -114,7 +114,7 @@ export default function RealtimeChart({
                 name={v.label}
                 stroke={v.color}
                 dot={false}
-                isAnimationActive={false}
+                isAnimationActive={true}
               />
             ))}
           </LineChart>
