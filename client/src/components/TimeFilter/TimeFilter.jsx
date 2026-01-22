@@ -87,7 +87,7 @@ export default function TimeFilter() {
   if (!min || !max) return <p>Carregando filtros...</p>;
 
   return (
-    <div id="container-timefilter" style={{ marginBottom: 20 }}>
+    <div id="container-timefilter">
       <input
         type="datetime-local"
         value={start}

@@ -2,11 +2,12 @@
     display: flex;
     gap: 5px;
     padding: 5px;
+    align-items: center; /* Garante que inputs e botões tenham a mesma base central */
 }
 
 input[type="datetime-local"]{
     background-color: #ffffff;
-    padding: 2px;
+    padding: 4px;
     font-family: "Roboto Mono",monospace;
     color: #0a0a0a;
     border: 1px solid;

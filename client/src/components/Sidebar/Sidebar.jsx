@@ -19,10 +19,10 @@ export default function Navbar() {
         
                     <p id="user_infos">
                         <span className="item-description">
-                            Administrador
+                            Solar Station
                         </span>
                         <span className="item-description">
-                            Conta Dev
+                            App Web
                         </span>
                     </p>
                 </div>
