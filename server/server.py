@@ -146,12 +146,20 @@ def handle_client(conn, addr):
                 try:
                     payload = json.loads(raw_message)
 
+                    # HEARTBEAT
+                    if payload.get("meta", {}).get("type") == "hb":
+                        # opcional: log leve
+                        print(f"[HB] {addr}")
+                        continue
+
                     if not verify_hmac(raw_message):
                         print(f"[HMAC INVÁLIDO] Mensagem descartada de {addr}")
                         continue
 
                     # HMAC validado → remover do payload
                     payload.get("meta", {}).pop("hmac", None)
+                    # Type usado para heartbeat → remover do payload
+                    payload.get("meta", {}).pop("type", None)
 
                     if "received_at" not in payload:
                         payload["received_at"] = datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')

@@ -4,6 +4,7 @@
 #include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "hardware/timer.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -20,6 +21,10 @@
 // --- Wi-Fi ---
 #define WIFI_SSID     "KAUA_LQ"
 #define WIFI_PASS     "12345678"
+
+// --- Intervalos de Tempo ---
+#define HEARTBEAT_INTERVAL_SEC   30
+#define DATA_SEND_INTERVAL_SEC   600  // 10 minutos
 
 #define BTN_A 5
 bool flag_btn = 0;
@@ -69,8 +74,13 @@ void comm_task(void *param) {
     char hmac_hex[65];
     char payload[512];
 
+    absolute_time_t last_heartbeat = get_absolute_time();
+    absolute_time_t last_data_send = get_absolute_time();
+
     while (true) {
-        // GERENCIAMENTO DE CONEXÃO
+        absolute_time_t now = get_absolute_time();
+
+        // --- Wi-Fi / TCP management ---
         if (!wifi_is_connected()) {
             flag_wf_state = 0;
             write_oled_values(&data); // Mostra o ícone de sem Wi-Fi
@@ -88,10 +98,22 @@ void comm_task(void *param) {
             flag_wf_state = 1; 
         }
 
-        if (xQueueReceive(sensor_queue, &data, pdMS_TO_TICKS(200)) == pdTRUE) {
-
-            // Atualiza display OLED com os novos dados
+        // --- Atualização de display (1 Hz) ---
+        if (xQueueReceive(sensor_queue, &data, 0) == pdTRUE) {
             write_oled_values(&data);
+        }
+
+        // --- Heartbeat (30 s) ---
+        if (absolute_time_diff_us(last_heartbeat, now) >=
+            HEARTBEAT_INTERVAL_SEC * 1000000LL) {
+
+            tcp_client_send("{\"meta\":{\"type\":\"hb\"}}\n");
+            last_heartbeat = now;
+        }
+
+        // --- Envio de dados reais (10 min) ---
+        if (absolute_time_diff_us(last_data_send, now) >=
+            DATA_SEND_INTERVAL_SEC * 1000000LL) {
 
             snprintf(data_json, sizeof(data_json),
                 "{"
@@ -112,20 +134,32 @@ void comm_task(void *param) {
             snprintf(payload, sizeof(payload),
                 "{"
                 "\"meta\":{"
+                    "\"type\":\"data\","
                     "\"pend\":%s,"
                     "\"hmac\":\"%s\""
                 "},"
                 "\"data\":%s"
                 "}\n",
-                has_pending_msg ? "true" : "false",
+                data_was_pending ? "true" : "false",
                 hmac_hex,
                 data_json
             );
 
+            bool was_connected = tcp_connected_flag;
+
             tcp_client_send(payload);
-            tcp_client_flush_pending_if_possible();
+            /* Se não estava conectado OU mensagem ficou pendente,
+            * então houve perda de dados */
+            if (!was_connected || has_pending_msg) {
+                data_was_pending = true;
+            }
+            if (!has_pending_msg && tcp_connected_flag) {
+                data_was_pending = false;
+            }
+            last_data_send = now;
         }
 
+        tcp_client_flush_pending_if_possible();
         cyw43_arch_poll();
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -228,15 +262,6 @@ bool wifi_is_connected() {
 }
 
 bool wifi_reconnect() {
-    cyw43_arch_deinit();
-    vTaskDelay(pdMS_TO_TICKS(1000));
-
-    if (cyw43_arch_init()) {
-        printf("Erro ao inicializar Wi-Fi\n");
-        return false;
-    }
-    cyw43_arch_enable_sta_mode();
-
     int err = cyw43_arch_wifi_connect_timeout_ms(
         WIFI_SSID,
         WIFI_PASS,

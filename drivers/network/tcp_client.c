@@ -9,6 +9,7 @@ volatile int tcp_trying_connect = 0;
 // mensagem pendente (simples fila de 1 elemento)
 char pending_msg[PENDING_MSG_MAX];
 volatile int has_pending_msg = 0;
+volatile bool data_was_pending = false;
 
 /* ------------- TCP callbacks --------------- */
 
@@ -30,11 +31,6 @@ static err_t tcp_client_connected(void *arg, struct tcp_pcb *tpcb, err_t err) {
     tcp_err(tpcb, NULL); // registramos error callback separadamente se quisermos
     tcp_sent(tpcb, NULL); // podemos usar para saber quando o TX buffer foi liberado
     tcp_poll(tpcb, NULL, 0);
-
-    // se tinha mensagem pendente, tenta enviar agora
-    if (has_pending_msg) {
-        // nada aqui: o envio será feito pela função pública tcp_client_send
-    }
 
     return ERR_OK;
 }
