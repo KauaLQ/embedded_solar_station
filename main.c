@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "hardware/gpio.h"
@@ -30,6 +31,22 @@
 bool flag_btn = 0;
 bool flag_wf_state = 1;
 
+/* ---------------- Configurações do Tracking ---------------- */
+
+#define PIN_STEP  4
+#define PIN_DIR   9
+#define PIN_ENA   8
+
+#define KP              800.0f     // ganho proporcional (ajuste fino depois)
+#define DEADZONE        0.05f      // erro mínimo (~5%)
+#define MAX_STEPS_CYCLE 200        // limite por iteração
+#define STEP_DELAY_US   800        // velocidade do motor
+
+#define TRACKING_INTERVAL_SEC   600     // 10 minutos
+#define LUX_DELTA_THRESHOLD     0.10f   // 10% de variação mínima
+#define VB_DELTA_MIN            0.05f   // 50 mV (ajuste depois)
+#define RL_LIMIT_DEG            45.0f
+
 // estrutura para armazenar dados dos sensores da task de sensores
 typedef struct {
     float lux[3];
@@ -45,6 +62,7 @@ void button_callback(uint gpio, uint32_t events);
 bool wifi_is_connected();
 bool wifi_reconnect();
 void write_oled_values(const sensor_data_t *data);
+static void step_motor(uint32_t steps, bool direction);
 
 void sensor_task(void *param) {
     sensor_data_t data;
@@ -65,6 +83,110 @@ void sensor_task(void *param) {
         xQueueOverwrite(sensor_queue, &data);
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 1 Hz
+    }
+}
+
+void tracking_task(void *param) {
+    sensor_data_t data;
+    float erro;
+    uint32_t steps;
+
+    gpio_init(PIN_STEP);
+    gpio_init(PIN_DIR);
+    gpio_init(PIN_ENA);
+
+    gpio_set_dir(PIN_STEP, GPIO_OUT);
+    gpio_set_dir(PIN_DIR, GPIO_OUT);
+    gpio_set_dir(PIN_ENA, GPIO_OUT);
+
+    gpio_put(PIN_ENA, 0); // ENA ativo em LOW (mais seguro)
+
+    float last_lux_error = 0.0f;
+    float last_vb = 0.0f;
+    absolute_time_t last_move_time = get_absolute_time();
+    bool first_run = true;
+
+    while (true) {
+
+        if (xQueuePeek(sensor_queue, &data, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+
+        float lux_left  = data.lux[2];
+        float lux_right = data.lux[0];
+        float vb = data.energy[0];
+        float rl = data.angle[1];
+
+        /* Proteção noturna */
+        if ((lux_left + lux_right) < 50.0f) {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+
+        /* Limite mecânico */
+        if (rl < -RL_LIMIT_DEG || rl > RL_LIMIT_DEG) {
+            printf("[TRACK] RL fora do limite: %.2f\n", rl);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
+
+        /* Intervalo mínimo entre movimentos */
+        if (!first_run &&
+            absolute_time_diff_us(last_move_time, get_absolute_time()) <
+            TRACKING_INTERVAL_SEC * 1000000LL) {
+
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        /* Erro normalizado */
+        erro = (lux_right - lux_left) / (lux_right + lux_left);
+
+        /* Mudança relevante? */
+        if (!first_run &&
+            fabsf(erro - last_lux_error) < LUX_DELTA_THRESHOLD) {
+
+            printf("[TRACK] Lux estável, sem movimento\n");
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
+        /* Deadzone */
+        if (fabsf(erro) < DEADZONE) {
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
+        steps = (uint32_t)(fabsf(erro) * KP);
+        if (steps > MAX_STEPS_CYCLE) steps = MAX_STEPS_CYCLE;
+
+        bool dir = (erro > 0);
+
+        printf("[TRACK] MOVENDO | erro=%.3f steps=%lu dir=%s vb=%.2f rl=%.2f\n",
+               erro, steps, dir ? "DIR" : "ESQ", vb, rl);
+
+        /* Movimento */
+        step_motor(steps, dir);
+        vTaskDelay(pdMS_TO_TICKS(1000)); // estabilização
+
+        /* Reavalia VB */
+        if (xQueuePeek(sensor_queue, &data, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            float vb_new = data.energy[0];
+
+            if (fabsf(vb_new - vb) < VB_DELTA_MIN) {
+                printf("[TRACK] Movimento inefetivo, revertendo\n");
+                step_motor(steps, !dir); // volta
+            } else {
+                printf("[TRACK] Movimento efetivo (VB %.2f -> %.2f)\n", vb, vb_new);
+                last_vb = vb_new;
+                last_lux_error = erro;
+                last_move_time = get_absolute_time();
+                first_run = false;
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
 
@@ -234,6 +356,7 @@ int main() {
     configASSERT(sensor_queue != NULL);
 
     xTaskCreate(sensor_task, "SensorTask", 1024, &sensor, 2, NULL);
+    xTaskCreate(tracking_task, "TrackingTask", 2048, NULL, 1, NULL);
     xTaskCreate(comm_task, "CommTask", 4096, NULL, 1, NULL);
 
     vTaskStartScheduler();
@@ -335,5 +458,16 @@ void write_oled_values(const sensor_data_t *data){
         SSD1306_draw_image(110, 8, 16, 16, icon_nowifi_preto);
         SSD1306_draw_image(110, 28, 16, 16, icon_nocloud_preto);
         SSD1306_update();
+    }
+}
+
+static void step_motor(uint32_t steps, bool direction) {
+    gpio_put(PIN_DIR, direction);
+
+    for (uint32_t i = 0; i < steps; i++) {
+        gpio_put(PIN_STEP, 1);
+        sleep_us(STEP_DELAY_US);
+        gpio_put(PIN_STEP, 0);
+        sleep_us(STEP_DELAY_US);
     }
 }
