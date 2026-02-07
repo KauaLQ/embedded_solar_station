@@ -32,6 +32,7 @@ bool flag_btn = 0;
 bool flag_wf_state = 1;
 
 /* ---------------- Configurações do Tracking ---------------- */
+#define ENABLE_SERIAL_MOCK  0   // <-- troque para 0 para sensores reais
 
 #define PIN_STEP  4
 #define PIN_DIR   9
@@ -86,6 +87,72 @@ void sensor_task(void *param) {
     }
 }
 
+void mock_serial_task(void *param) {
+    char buffer[128];
+    int idx = 0;
+
+    printf("\n[MOCK] Envie dados no formato:\n");
+    printf("lux_left,lux_right,vb_before,vb_after,rl\n");
+
+    while (true) {
+
+        int c = getchar_timeout_us(1000);
+
+        if (c == PICO_ERROR_TIMEOUT) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+
+        if (c == '\n' || c == '\r') {
+            buffer[idx] = '\0';
+            idx = 0;
+
+            float lux_left, lux_right, vb_before, vb_after, rl;
+
+            if (sscanf(buffer, "%f,%f,%f,%f,%f",
+                       &lux_left, &lux_right,
+                       &vb_before, &vb_after,
+                       &rl) == 5) {
+
+                sensor_data_t mock = {0};
+
+                /* Lux */
+                mock.lux[2] = lux_left;
+                mock.lux[0] = lux_right;
+                mock.lux[1] = (lux_left + lux_right) / 2.0f;
+
+                /* Energia */
+                mock.energy[0] = vb_before;
+
+                /* Ângulo */
+                mock.angle[1] = rl;
+                mock.angle[0] = 0.0f;
+
+                /* Injeta BEFORE */
+                xQueueOverwrite(sensor_queue, &mock);
+
+                printf("[MOCK] BEFORE -> L=%.1f R=%.1f VB=%.2f RL=%.2f\n",
+                       lux_left, lux_right, vb_before, rl);
+
+                /* Simula tempo de movimento */
+                vTaskDelay(pdMS_TO_TICKS(1200));
+
+                /* Atualiza VB AFTER */
+                mock.energy[0] = vb_after;
+                xQueueOverwrite(sensor_queue, &mock);
+
+                printf("[MOCK] AFTER  -> VB=%.2f\n", vb_after);
+            }
+            else {
+                printf("[MOCK] Formato invalido\n");
+            }
+        }
+        else if (idx < sizeof(buffer) - 1) {
+            buffer[idx++] = (char)c;
+        }
+    }
+}
+
 void tracking_task(void *param) {
     sensor_data_t data;
     float erro;
@@ -99,7 +166,7 @@ void tracking_task(void *param) {
     gpio_set_dir(PIN_DIR, GPIO_OUT);
     gpio_set_dir(PIN_ENA, GPIO_OUT);
 
-    gpio_put(PIN_ENA, 0); // ENA ativo em LOW (mais seguro)
+    gpio_put(PIN_ENA, 1); // ENA ativo em LOW (mais seguro)
 
     float last_lux_error = 0.0f;
     float last_vb = 0.0f;
@@ -120,6 +187,7 @@ void tracking_task(void *param) {
 
         /* Proteção noturna */
         if ((lux_left + lux_right) < 50.0f) {
+            printf("[TRACK] Baixa luminosidade (L=%.1f R=%.1f), aguardando\n", lux_left, lux_right);
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
@@ -154,6 +222,7 @@ void tracking_task(void *param) {
 
         /* Deadzone */
         if (fabsf(erro) < DEADZONE) {
+            printf("[TRACK] Dentro da deadzone (erro=%.3f), sem movimento\n", erro);
             vTaskDelay(pdMS_TO_TICKS(2000));
             continue;
         }
@@ -174,7 +243,7 @@ void tracking_task(void *param) {
         if (xQueuePeek(sensor_queue, &data, pdMS_TO_TICKS(1000)) == pdTRUE) {
             float vb_new = data.energy[0];
 
-            if (fabsf(vb_new - vb) < VB_DELTA_MIN) {
+            if ((vb_new - vb) < VB_DELTA_MIN) {
                 printf("[TRACK] Movimento inefetivo, revertendo\n");
                 step_motor(steps, !dir); // volta
             } else {
@@ -355,7 +424,12 @@ int main() {
     sensor_queue = xQueueCreate(1, sizeof(sensor_data_t));
     configASSERT(sensor_queue != NULL);
 
+    #if !ENABLE_SERIAL_MOCK
     xTaskCreate(sensor_task, "SensorTask", 1024, &sensor, 2, NULL);
+    #endif
+    #if ENABLE_SERIAL_MOCK
+    xTaskCreate(mock_serial_task, "MockSerialTask", 2048, NULL, 2, NULL);
+    #endif
     xTaskCreate(tracking_task, "TrackingTask", 2048, NULL, 1, NULL);
     xTaskCreate(comm_task, "CommTask", 4096, NULL, 1, NULL);
 
