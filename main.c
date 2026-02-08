@@ -47,7 +47,7 @@ bool flag_wf_state = 1;
 
 #define KP              800.0f     // ganho proporcional (ajuste fino depois)
 #define DEADZONE        0.05f      // erro mínimo (~5%)
-#define MAX_STEPS_CYCLE 200        // limite por iteração
+#define MAX_STEPS_CYCLE 50        // limite por iteração
 #define STEP_DELAY_US   800        // velocidade do motor
 
 #define TRACKING_INTERVAL_SEC   600     // 10 minutos
@@ -243,16 +243,6 @@ void tracking_task(void *param) {
             continue;
         }
 
-        /* Limite mecânico */
-        if (rl < -RL_LIMIT_DEG || rl > RL_LIMIT_DEG) {
-            printf("[TRACK] RL fora do limite: %.2f\n", rl);
-            for(int i=0; i<5; i++) {
-                tasks_alive |= (1 << 2); 
-                vTaskDelay(pdMS_TO_TICKS(1000));
-            }
-            continue;
-        }
-
         /* Intervalo mínimo entre movimentos */
         if (absolute_time_diff_us(last_move_time, get_absolute_time()) <
             TRACKING_INTERVAL_SEC * 1000000LL) {
@@ -283,6 +273,23 @@ void tracking_task(void *param) {
         if (steps > MAX_STEPS_CYCLE) steps = MAX_STEPS_CYCLE;
 
         bool dir = (erro > 0);
+
+        /*
+        * Proteção de limite mecânico:
+        * - Se estiver no limite positivo, só pode mover no sentido que diminui RL
+        * - Se estiver no limite negativo, só pode mover no sentido que aumenta RL
+        */
+        if (rl >= RL_LIMIT_DEG && dir == false) {
+            printf("[TRACK] No limite +%.1f°, bloqueando movimento que aumentaria RL\n", RL_LIMIT_DEG);
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
+        if (rl <= -RL_LIMIT_DEG && dir == true) {
+            printf("[TRACK] No limite -%.1f°, bloqueando movimento que diminuiria RL\n", RL_LIMIT_DEG);
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
 
         printf("[TRACK] MOVENDO | erro=%.3f steps=%lu dir=%s vb=%.2f rl=%.2f\n",
                erro, steps, dir ? "DIR" : "ESQ", vb, rl);
