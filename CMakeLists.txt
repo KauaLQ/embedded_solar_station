@@ -75,6 +75,7 @@ target_link_libraries(solar_station_v2
         hardware_i2c
         hardware_adc
         hardware_timer
+        hardware_watchdog
         onewire_library
         pico_cyw43_arch_lwip_threadsafe_background
         pico_mbedtls

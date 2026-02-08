@@ -6,6 +6,7 @@
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 #include "hardware/timer.h"
+#include "hardware/watchdog.h"
 
 #include "FreeRTOS.h"
 #include "queue.h"
@@ -23,11 +24,17 @@
 #define WIFI_SSID     "KAUA_LQ"
 #define WIFI_PASS     "12345678"
 
+// --- Watchdog ---
+// Bitmask para controle das tasks (Bit 0: Sensor, Bit 1: Comm, Bit 2: Tracking)
+static uint8_t tasks_alive = 0;
+#define ALL_TASKS_OK  0x07 // 0b111
+
 // --- Intervalos de Tempo ---
 #define HEARTBEAT_INTERVAL_SEC   30
 #define DATA_SEND_INTERVAL_SEC   600  // 10 minutos
 
 #define BTN_A 5
+#define LED_RED 13
 bool flag_btn = 0;
 bool flag_wf_state = 1;
 
@@ -47,6 +54,11 @@ bool flag_wf_state = 1;
 #define LUX_DELTA_THRESHOLD     0.10f   // 10% de variação mínima
 #define VB_DELTA_MIN            0.05f   // 50 mV (ajuste depois)
 #define RL_LIMIT_DEG            45.0f
+
+// --- Configurações do Homing ---
+#define RL_HOME_TOLERANCE    1.0f    // ±1 grau
+#define RL_HOME_STEP_SIZE    20      // passos por ajuste fino
+#define RL_HOME_DELAY_MS     200
 
 // estrutura para armazenar dados dos sensores da task de sensores
 typedef struct {
@@ -82,6 +94,15 @@ void sensor_task(void *param) {
 
         // Envia snapshot completo (sobrescreve se necessário)
         xQueueOverwrite(sensor_queue, &data);
+
+        // Marca a si mesma como viva
+        tasks_alive |= (1 << 0);
+
+        // Se todas as tasks deram check-in, alimenta o hardware
+        if (tasks_alive == ALL_TASKS_OK) {
+            watchdog_update();
+            tasks_alive = 0; // Reseta para a próxima rodada
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 1 Hz
     }
@@ -171,10 +192,12 @@ void tracking_task(void *param) {
     float last_lux_error = 0.0f;
     float last_vb = 0.0f;
     absolute_time_t last_move_time = get_absolute_time();
-    bool first_run = true;
+    bool led_state = false;
+    bool is_aligned = false;
+    absolute_time_t last_blink = get_absolute_time();
 
     while (true) {
-
+        tasks_alive |= (1 << 2); // Avisa que o tracking está rodando
         if (xQueuePeek(sensor_queue, &data, pdMS_TO_TICKS(1000)) != pdTRUE) {
             vTaskDelay(pdMS_TO_TICKS(500));
             continue;
@@ -185,25 +208,55 @@ void tracking_task(void *param) {
         float vb = data.energy[0];
         float rl = data.angle[1];
 
+        // rotina de alinhamento inicial do painel (homing)
+        if (!is_aligned) {
+            // Pisca Led para indicar alinhamento em progresso
+            if (absolute_time_diff_us(last_blink, get_absolute_time()) >= 250000) {
+                led_state = !led_state;
+                gpio_put(LED_RED, led_state);
+                last_blink = get_absolute_time();
+            }
+
+            printf("[HOME] RL atual = %.2f\n", rl);
+
+            if (fabsf(rl) <= RL_HOME_TOLERANCE) {
+                printf("[HOME] Alinhado com sucesso\n");
+                is_aligned = true;
+                gpio_put(LED_RED, 0);
+                last_move_time = get_absolute_time(); // evita mover logo após
+                continue;
+            }
+
+            bool dir = (rl > 0.0f);
+            step_motor(RL_HOME_STEP_SIZE, dir);
+            vTaskDelay(pdMS_TO_TICKS(RL_HOME_DELAY_MS));
+            continue;
+        }
+
         /* Proteção noturna */
         if ((lux_left + lux_right) < 50.0f) {
             printf("[TRACK] Baixa luminosidade (L=%.1f R=%.1f), aguardando\n", lux_left, lux_right);
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            for(int i=0; i<5; i++) {
+                tasks_alive |= (1 << 2); 
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
             continue;
         }
 
         /* Limite mecânico */
         if (rl < -RL_LIMIT_DEG || rl > RL_LIMIT_DEG) {
             printf("[TRACK] RL fora do limite: %.2f\n", rl);
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            for(int i=0; i<5; i++) {
+                tasks_alive |= (1 << 2); 
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
             continue;
         }
 
         /* Intervalo mínimo entre movimentos */
-        if (!first_run &&
-            absolute_time_diff_us(last_move_time, get_absolute_time()) <
+        if (absolute_time_diff_us(last_move_time, get_absolute_time()) <
             TRACKING_INTERVAL_SEC * 1000000LL) {
-
+            printf("[TRACK] Aguardando intervalo de 10 min\n");
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
@@ -212,8 +265,7 @@ void tracking_task(void *param) {
         erro = (lux_right - lux_left) / (lux_right + lux_left);
 
         /* Mudança relevante? */
-        if (!first_run &&
-            fabsf(erro - last_lux_error) < LUX_DELTA_THRESHOLD) {
+        if (fabsf(erro - last_lux_error) < LUX_DELTA_THRESHOLD) {
 
             printf("[TRACK] Lux estável, sem movimento\n");
             vTaskDelay(pdMS_TO_TICKS(2000));
@@ -237,6 +289,7 @@ void tracking_task(void *param) {
 
         /* Movimento */
         step_motor(steps, dir);
+        tasks_alive |= (1 << 2); // Check-in logo após o motor parar
         vTaskDelay(pdMS_TO_TICKS(1000)); // estabilização
 
         /* Reavalia VB */
@@ -251,7 +304,6 @@ void tracking_task(void *param) {
                 last_vb = vb_new;
                 last_lux_error = erro;
                 last_move_time = get_absolute_time();
-                first_run = false;
             }
         }
 
@@ -269,6 +321,7 @@ void comm_task(void *param) {
     absolute_time_t last_data_send = get_absolute_time();
 
     while (true) {
+        tasks_alive |= (1 << 1); // Avisa que a comunicação está rodando
         absolute_time_t now = get_absolute_time();
 
         // --- Wi-Fi / TCP management ---
@@ -279,7 +332,10 @@ void comm_task(void *param) {
             if (!wifi_reconnect()) {
                 // Se falhar, aguarda 5 segundos sem travar o processador
                 // Isso permite que outras tasks (como a de sensores) continuem rodando
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                for(int i=0; i<5; i++) {
+                    tasks_alive |= (1 << 1); 
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
                 continue; 
             }
 
@@ -364,6 +420,9 @@ int main() {
     gpio_init(BTN_A);
     gpio_set_dir(BTN_A, GPIO_IN);
     gpio_pull_up(BTN_A); // Ativa pull-up interno no botão
+    gpio_init(LED_RED);
+    gpio_set_dir(LED_RED, GPIO_OUT);
+    gpio_put(LED_RED, 0); // Desliga o LED inicialmente
 
     // inicializa o barramento i2c
     i2c_bus_init();
@@ -432,6 +491,11 @@ int main() {
     #endif
     xTaskCreate(tracking_task, "TrackingTask", 2048, NULL, 1, NULL);
     xTaskCreate(comm_task, "CommTask", 4096, NULL, 1, NULL);
+
+    if (watchdog_caused_reboot()) {
+        printf("Reboot causado pelo Watchdog!\n");
+    }
+    watchdog_enable(8000, 1);
 
     vTaskStartScheduler();
 
